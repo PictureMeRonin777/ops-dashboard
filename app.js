@@ -87,6 +87,8 @@ function render() {
  <div class="col">
   <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
    ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
+  <section class="card sponsors"><h2>🤝 Sponsor leads</h2>${(d.sponsorLeads||[]).length ? `<ul class="tlist">${[...d.sponsorLeads].sort((a,b)=>a.rank-b.rank).map(x=>`<li class="${x.done?"done":""}"><label><input type="checkbox" data-sl="${esc(x.id)}" ${x.done?"checked":""} title="Applied / done"> <b>#${esc(x.rank)}</b> ${link(x.url,x.brand)}</label> <span class="tsmall">applied/done</span><br>${esc(x.offer)}<br><span class="tsmall">${esc(x.eligibility)}</span><br><span class="tsmall">Next: ${esc(x.nextStep)}</span></li>`).join("")}</ul>` : empty("No sponsor leads")}
+   <p class="tsmall"><a href="https://cursor.com/canvas/store-dcf0a6f8-e310-4fdc-b774-d13dd728b8b1/33d2f834-edb8-4139-882e-70345c2cd41c" target="_blank" rel="noopener">Sponsorship plan ↗</a></p></section>
  </div>
  <div class="col">
   <section class="card zdd"><h2>🌀 ZeroDrift Daily <a class="hlink" href="${ZDD_BOARD}" target="_blank" rel="noopener">Trello board ↗</a></h2>
@@ -134,6 +136,7 @@ app.addEventListener("change", e => {
   if (t.dataset.tq) { const i = +t.dataset.tq, v = t.value, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "to-do quadrant"); }
   if (t.dataset.tdone) { const id = t.dataset.tdone, v = t.checked; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) { x.done = true; x.doneAt = new Date().toISOString(); } else { delete x.done; delete x.doneAt; } } }, v ? "check trello card done" : "uncheck trello card"); }
   if (t.dataset.trq) { const id = t.dataset.trq, v = t.value; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "trello quadrant"); }
+  if (t.dataset.sl) { const id = t.dataset.sl, v = t.checked; save(d => { const x = (d.sponsorLeads||[]).find(q => q.id === id); if (x) { x.done = v; x.doneAt = v ? new Date().toISOString() : null; } }, v ? "sponsor lead applied" : "uncheck sponsor lead"); }
   if (t.dataset.app) { const i = +t.dataset.app, v = t.value, k = data.jobs.applications[i].url; save(d => { const x = d.jobs.applications.find(a => a.url === k); if (x) x.status = v; }, "job status"); }
 });
 app.addEventListener("submit", e => { if (e.target.id !== "addtodo") return; e.preventDefault(); const text = e.target.t.value.trim(), id = "t" + Date.now(); save(d => { (d.todos ||= []).push({id, text, done: false}); }, "add to-do"); });
