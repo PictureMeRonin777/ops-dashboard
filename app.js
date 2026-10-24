@@ -85,9 +85,6 @@ function render() {
    <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
  </div>
  <div class="col">
-  <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}${tList(tBy(d,"trades"))}</section>
- </div>
- <div class="col">
   <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
    ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
  </div>
@@ -99,6 +96,9 @@ function render() {
    <h3>Fleet</h3>${zF.length ? table(zF,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]]) : empty("No ZDD bots yet")}
    <h3>Parked</h3>${zP.length ? `<ul>${pList(zP)}</ul>` : empty("No ZDD parked items yet")}</section>
   <section class="card completed"><h2>☑️ Completed <span class="tsmall">checked off in Currently Working On</span></h2>${tBy(d,"completed").length ? `<ul class="tlist">${tBy(d,"completed").map(x=>`<li class="done">${link(x.url,x.name)}<br><span class="tsmall">${esc(x.board)} · ${esc(x.list)}</span></li>`).join("")}</ul>` : empty("No completed cards")}</section>
+ </div>
+ <div class="col">
+  <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}${tList(tBy(d,"trades"))}</section>
  </div>
  <div class="lower"><h2 class="lowh">Lower priority</h2><div class="lowgrid">
  <div class="col">
