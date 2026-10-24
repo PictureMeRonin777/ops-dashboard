@@ -51,7 +51,7 @@ function openCards(d) { // open cards: logs (WSJ sent/contacts/replies) are hist
   const w = d.wsj || {}, j = d.jobs || {};
   return [...(d.todos||[]).filter(t=>!t.done), ...(d.schedule||[]), ...(d.routines||[]), ...(w.next?[w.next]:[]),
     ...(j.shortlist||[]), ...(j.applications||[]).filter(a=>!CLOSED.test(a.status||"")), ...(d.trades||[]),
-    ...(d.fleet||[]).filter(f=>!CLOSED.test(f.state||"")), ...(d.parked||[]), ...trelloOpen(d).filter(x=>x.section==="cwo")]; // completed + backlog cards excluded from quadrant counts
+    ...(d.fleet||[]).filter(f=>!CLOSED.test(f.state||"")), ...(d.parked||[]), ...trelloOpen(d).filter(x=>x.section==="cwo"&&!x.done)]; // completed + backlog cards excluded from quadrant counts
 }
 function qsummary(d) {
   const c = {"urgent-important":0,"important-not-urgent":0,"passion-project":0,untagged:0};
@@ -67,9 +67,9 @@ const isZ = r => r && ((r.tags||[]).some(t => /zdd|zerodrift/i.test(t)) || r.pro
 const ZDD_BOARD = "https://trello.com/b/fIYJQKlK/zerodrift-daily";
 const todoLi = (t,i) => `<li class="${qc(t).trim()}"><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label>${t.trelloUrl?` <a class="tsmall" href="${esc(t.trelloUrl)}" target="_blank" rel="noopener">Trello ↗</a>`:""}${qsel(`data-tq="${i}"`, t)}</li>`;
 const fmtDue = s => { if (!s) return ""; const d = new Date(s), od = d < new Date(); return ` <span class="pill ${od?"billy":"warn"}">due ${d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}${od?" (overdue)":""}</span>`; };
-const tLi = x => `<li class="tcard${qc(x)}">${link(x.url, x.name)}${fmtDue(x.due)}<br><span class="tsmall">${esc(x.board)} · ${esc(x.list)}</span> ${qsel(`data-trq="${esc(x.id)}"`, x)}</li>`;
+const tLi = x => `<li class="tcard${qc(x)}">${x.section==="cwo"?`<input type="checkbox" data-tdone="${esc(x.id)}" ${x.done?"checked":""} title="Done (nightly sync completes it on Trello)"> `:""}${link(x.url, x.name)}${fmtDue(x.due)}<br><span class="tsmall">${esc(x.board)} · ${esc(x.list)}</span> ${qsel(`data-trq="${esc(x.id)}"`, x)}</li>`;
 const tList = (xs, msg) => xs.length ? `<ul class="tlist">${xs.map(tLi).join("")}</ul>` : (msg ? empty(msg) : "");
-const tBy = (d, sec) => trelloOpen(d).filter(x => x.section === sec);
+const tBy = (d, sec) => trelloOpen(d).filter(x => sec==="cwo" ? x.section==="cwo" && !x.done : sec==="completed" ? x.section==="completed" || (x.section==="cwo" && x.done) : x.section === sec);
 const tParked = xs => { const g = {}; xs.forEach(x => (g[x.board] ||= []).push(x)); return Object.entries(g).map(([b, v]) => `<details><summary>Trello: ${esc(b)} (${v.length})</summary>${tList(v)}</details>`).join(""); };
 function render() {
   const d = data, w = d.wsj || {}, j = d.jobs || {};
@@ -95,7 +95,7 @@ function render() {
    <h3>Routines</h3>${zR.length ? table(zR,[["Routine","name"],["When","schedule"],["Status","status"]]) : empty("No ZDD routines yet")}
    <h3>Fleet</h3>${zF.length ? table(zF,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]]) : empty("No ZDD bots yet")}
    <h3>Parked</h3>${zP.length ? `<ul>${pList(zP)}</ul>` : empty("No ZDD parked items yet")}</section>
-  <section class="card completed"><h2>☑️ Completed <span class="tsmall">checked off in Currently Working On</span></h2>${tBy(d,"completed").length ? `<ul class="tlist">${tBy(d,"completed").map(x=>`<li class="done">${link(x.url,x.name)}<br><span class="tsmall">${esc(x.board)} · ${esc(x.list)}</span></li>`).join("")}</ul>` : empty("No completed cards")}</section>
+  <section class="card completed"><h2>☑️ Completed <span class="tsmall">checked off in Currently Working On</span></h2>${tBy(d,"completed").length ? `<ul class="tlist">${tBy(d,"completed").map(x=>`<li class="done">${x.section==="cwo"?`<input type="checkbox" data-tdone="${esc(x.id)}" checked title="Uncheck to move back (pending Trello sync)"> `:""}${link(x.url,x.name)}<br><span class="tsmall">${esc(x.board)} · ${esc(x.list)}</span></li>`).join("")}</ul>` : empty("No completed cards")}</section>
  </div>
  <div class="col">
   <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}${tList(tBy(d,"trades"))}</section>
@@ -132,6 +132,7 @@ app.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.todo) { const i = +t.dataset.todo, v = t.checked, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) x.done = v; }, "toggle to-do"); }
   if (t.dataset.tq) { const i = +t.dataset.tq, v = t.value, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "to-do quadrant"); }
+  if (t.dataset.tdone) { const id = t.dataset.tdone, v = t.checked; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) { x.done = true; x.doneAt = new Date().toISOString(); } else { delete x.done; delete x.doneAt; } } }, v ? "check trello card done" : "uncheck trello card"); }
   if (t.dataset.trq) { const id = t.dataset.trq, v = t.value; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "trello quadrant"); }
   if (t.dataset.app) { const i = +t.dataset.app, v = t.value, k = data.jobs.applications[i].url; save(d => { const x = d.jobs.applications.find(a => a.url === k); if (x) x.status = v; }, "job status"); }
 });
