@@ -15,3 +15,7 @@ th{color:var(--sub);font-size:12px;text-transform:uppercase}.empty{color:var(--s
 input,button,select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px}button{background:#fff;cursor:pointer}
 form{display:flex;flex-wrap:wrap;gap:6px}details summary{cursor:pointer;color:var(--blue)}
 .done{text-decoration:line-through;color:var(--sub)}
+.qsum{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.qsum .pill{font-size:13px;padding:4px 12px}
+.q-urgent-important{box-shadow:inset 3px 0 0 var(--red)}.q-important-not-urgent{box-shadow:inset 3px 0 0 var(--blue)}.q-passion-project{box-shadow:inset 3px 0 0 var(--grey)}
+li[class*="q-"],tr[class*="q-"]>td:first-child{padding-left:8px}tr[class*="q-"]{box-shadow:none}tr.q-urgent-important>td:first-child{box-shadow:inset 3px 0 0 var(--red)}tr.q-important-not-urgent>td:first-child{box-shadow:inset 3px 0 0 var(--blue)}tr.q-passion-project>td:first-child{box-shadow:inset 3px 0 0 var(--grey)}
+select.qsel{font-size:11px;padding:1px 4px;margin-left:6px}

@@ -41,19 +41,36 @@ async function save(mutate, msg) {
 
 const empty = t => `<p class="empty">${t || "Nothing here."}</p>`;
 const pill = s => { const k = /submit|active|done|ok|shortlist/i.test(s) ? "ok" : /needs|billy/i.test(s) ? "billy" : /closed|retired|fail|skip/i.test(s) ? "muted" : "warn"; return `<span class="pill ${k}">${esc(s)}</span>`; };
-const table = (rows, cols) => rows?.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr>${rows.map(r => `<tr>${cols.map(c => `<td>${c[2] ? c[2](r) : esc(r[c[1]])}</td>`).join("")}</tr>`).join("")}</table>` : empty();
+const table = (rows, cols) => rows?.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr>${rows.map(r => `<tr class="${qc(r).trim()}">${cols.map(c => `<td>${c[2] ? c[2](r) : esc(r[c[1]])}</td>`).join("")}</tr>`).join("")}</table>` : empty();
+const QS = ["urgent-important","important-not-urgent","passion-project"], QL = {"urgent-important":"Urgent+important","important-not-urgent":"Important, not urgent","passion-project":"Passion project"};
+const qc = r => QS.includes(r?.quadrant) ? ` q-${r.quadrant}` : "";
+const qsel = (attr, r) => `<select class="qsel" ${attr} title="Quadrant"><option value="">untagged</option>${QS.map(q=>`<option value="${q}" ${r.quadrant===q?"selected":""}>${q}</option>`).join("")}</select>`;
+const CLOSED = /closed|rejected|fail|skip|retired|done/i;
+function openCards(d) { // open cards: logs (WSJ sent/contacts/replies) are history, not cards
+  const w = d.wsj || {}, j = d.jobs || {};
+  return [...(d.todos||[]).filter(t=>!t.done), ...(d.schedule||[]), ...(d.routines||[]), ...(w.next?[w.next]:[]),
+    ...(j.shortlist||[]), ...(j.applications||[]).filter(a=>!CLOSED.test(a.status||"")), ...(d.trades||[]),
+    ...(d.fleet||[]).filter(f=>!CLOSED.test(f.state||"")), ...(d.parked||[])];
+}
+function qsummary(d) {
+  const c = {"urgent-important":0,"important-not-urgent":0,"passion-project":0,untagged:0};
+  for (const r of openCards(d)) c[QS.includes(r.quadrant) ? r.quadrant : "untagged"]++;
+  const cls = {"urgent-important":"billy","important-not-urgent":"bot","passion-project":"muted",untagged:"warn"};
+  $("#qsum").innerHTML = Object.entries(c).map(([k,n]) => `<span class="pill ${cls[k]}">${QL[k]||"Untagged"}: <b>${n}</b></span>`).join("");
+}
 const link = (u, t) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t);
 
 function render() {
   const d = data, w = d.wsj || {}, j = d.jobs || {};
+  qsummary(d);
   app.innerHTML = `
   <section class="card"><h2>✅ Today / to-dos</h2>
-   <ul class="check">${(d.todos||[]).map((t,i) => `<li><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label></li>`).join("") || empty()}</ul>
+   <ul class="check">${(d.todos||[]).map((t,i) => `<li class="${qc(t).trim()}"><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label>${qsel(`data-tq="${i}"`, t)}</li>`).join("") || empty()}</ul>
    <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
   <section class="card"><h2>🕒 Routines & schedule</h2><h3>Schedule</h3>${table(d.schedule,[["When","when"],["What","what"]])}
    <h3>Routines</h3>${table(d.routines,[["Routine","name"],["When","schedule"],["Owner","owner"],["Status","status"]])}</section>
   <section class="card"><h2>📨 WSJ hunt</h2>
-   <h3>Next contact</h3>${w.next ? `<p><b>#${esc(w.next.n)} ${esc(w.next.name)}</b><br>${esc(w.next.email)} · ${esc(w.next.phone)}<br>${esc(w.next.address)}</p>` : empty()}
+   <h3>Next contact</h3>${w.next ? `<p class="${qc(w.next).trim()}" style="padding-left:8px"><b>#${esc(w.next.n)} ${esc(w.next.name)}</b><br>${esc(w.next.email)} · ${esc(w.next.phone)}<br>${esc(w.next.address)}</p>` : empty()}
    <h3>Replies</h3>${table(w.replies,[["Date","date"],["Who","who"],["What","what"]])}
    <details><summary>Sent log (${(w.sent||[]).length})</summary>${table([...(w.sent||[])].reverse(),[["Date","date"],["Entry","entry"]])}</details>
    <details><summary>Contact list (${(w.contacts||[]).length})</summary>${table(w.contacts,[["#","n"],["Name","name"],["Email","email"]])}</details></section>
@@ -61,12 +78,13 @@ function render() {
    <h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
   <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}</section>
   <section class="card"><h2>🤖 Fleet</h2>${table(d.fleet,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}</section>
-  <section class="card"><h2>🅿️ Parked</h2><ul>${(d.parked||[]).map(p=>`<li>${esc(p.text)}</li>`).join("") || empty()}</ul></section>`;
+  <section class="card"><h2>🅿️ Parked</h2><ul>${(d.parked||[]).map(p=>`<li class="${qc(p).trim()}">${esc(p.text)}</li>`).join("") || empty()}</ul></section>`;
 }
 
 app.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.todo) { const i = +t.dataset.todo, v = t.checked, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) x.done = v; }, "toggle to-do"); }
+  if (t.dataset.tq) { const i = +t.dataset.tq, v = t.value, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "to-do quadrant"); }
   if (t.dataset.app) { const i = +t.dataset.app, v = t.value, k = data.jobs.applications[i].url; save(d => { const x = d.jobs.applications.find(a => a.url === k); if (x) x.status = v; }, "job status"); }
 });
 app.addEventListener("submit", e => { if (e.target.id !== "addtodo") return; e.preventDefault(); const text = e.target.t.value.trim(), id = "t" + Date.now(); save(d => { (d.todos ||= []).push({id, text, done: false}); }, "add to-do"); });
