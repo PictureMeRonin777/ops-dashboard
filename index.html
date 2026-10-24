@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Billy's Ops Dashboard</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap">
+<header><h1>Billy's Ops Dashboard</h1><span id="status" class="asof">loading…</span>
+<span><button id="reload">Refresh</button> <button id="forget">Forget key</button></span></header>
+<section id="keybox" class="card hero" hidden>
+ <h2>Connect your data</h2>
+ <p>Paste the fine-grained GitHub token scoped to <b>ops-data</b> (Contents: read/write). It stays in this browser only.</p>
+ <form id="keyform"><input id="owner" placeholder="GitHub username" autocomplete="username" required>
+ <input id="token" type="password" placeholder="github_pat_…" autocomplete="off" required><button>Save</button></form>
+</section>
+<main id="app" class="grid"></main>
+</div><script src="config.js"></script><script src="app.js"></script></body></html>

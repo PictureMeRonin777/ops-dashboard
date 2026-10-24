@@ -1,0 +1,78 @@
+(() => {
+const C = window.OPS_CONFIG, LS = "opsdash.key", LO = "opsdash.owner";
+const $ = s => document.querySelector(s), app = $("#app"), st = $("#status");
+const params = new URLSearchParams(location.search);
+const MOCK = params.has("mock"); // ?mock -> local seed file, read-only, no token
+let data = null, sha = null;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const owner = () => C.owner || localStorage.getItem(LO) || "";
+const api = () => `https://api.github.com/repos/${owner()}/${C.repo}/contents/${C.path}`;
+const hdr = () => ({Authorization: `Bearer ${localStorage.getItem(LS)}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"});
+const b64d = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g,"")), c => c.charCodeAt(0)));
+const b64e = s => { const u = new TextEncoder().encode(s); let r = ""; for (const x of u) r += String.fromCharCode(x); return btoa(r); };
+
+async function load() {
+  st.textContent = "loading…";
+  if (MOCK) { data = await (await fetch(params.get("mock") || "../ops-data/data.json", {cache:"no-store"})).json(); st.textContent = "MOCK mode (local seed, edits not saved)"; return render(); }
+  if (!localStorage.getItem(LS) || !owner()) { $("#keybox").hidden = false; st.textContent = "needs key"; return; }
+  const r = await fetch(`${api()}?ref=${C.branch}`, {headers: hdr(), cache: "no-store"});
+  if (r.status === 401 || r.status === 403 || r.status === 404) { st.textContent = `GitHub said ${r.status}: check the key or repo name`; $("#keybox").hidden = false; return; }
+  const j = await r.json(); sha = j.sha; data = JSON.parse(b64d(j.content));
+  st.textContent = `synced ${new Date().toLocaleTimeString()}`; render();
+}
+
+// mutate: function applied to data; on 409/422 conflict refetch, reapply, retry
+async function save(mutate, msg) {
+  mutate(data); render();
+  if (MOCK) return;
+  for (let i = 0; i < 3; i++) {
+    st.textContent = "saving…";
+    data.updated = new Date().toISOString();
+    const r = await fetch(api(), {method: "PUT", headers: hdr(), body: JSON.stringify({message: msg || "dashboard edit", content: b64e(JSON.stringify(data, null, 1)), sha, branch: C.branch})});
+    if (r.ok) { sha = (await r.json()).content.sha; st.textContent = `saved ${new Date().toLocaleTimeString()}`; return; }
+    if (r.status === 409 || r.status === 422) {
+      const g = await (await fetch(`${api()}?ref=${C.branch}`, {headers: hdr(), cache: "no-store"})).json();
+      sha = g.sha; data = JSON.parse(b64d(g.content)); mutate(data); continue;
+    }
+    st.textContent = `save failed (${r.status})`; return;
+  }
+  st.textContent = "save conflict: refresh"; render();
+}
+
+const empty = t => `<p class="empty">${t || "Nothing here."}</p>`;
+const pill = s => { const k = /submit|active|done|ok|shortlist/i.test(s) ? "ok" : /needs|billy/i.test(s) ? "billy" : /closed|retired|fail|skip/i.test(s) ? "muted" : "warn"; return `<span class="pill ${k}">${esc(s)}</span>`; };
+const table = (rows, cols) => rows?.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr>${rows.map(r => `<tr>${cols.map(c => `<td>${c[2] ? c[2](r) : esc(r[c[1]])}</td>`).join("")}</tr>`).join("")}</table>` : empty();
+const link = (u, t) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t);
+
+function render() {
+  const d = data, w = d.wsj || {}, j = d.jobs || {};
+  app.innerHTML = `
+  <section class="card"><h2>✅ Today / to-dos</h2>
+   <ul class="check">${(d.todos||[]).map((t,i) => `<li><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label></li>`).join("") || empty()}</ul>
+   <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
+  <section class="card"><h2>🕒 Routines & schedule</h2><h3>Schedule</h3>${table(d.schedule,[["When","when"],["What","what"]])}
+   <h3>Routines</h3>${table(d.routines,[["Routine","name"],["When","schedule"],["Owner","owner"],["Status","status"]])}</section>
+  <section class="card"><h2>📨 WSJ hunt</h2>
+   <h3>Next contact</h3>${w.next ? `<p><b>#${esc(w.next.n)} ${esc(w.next.name)}</b><br>${esc(w.next.email)} · ${esc(w.next.phone)}<br>${esc(w.next.address)}</p>` : empty()}
+   <h3>Replies</h3>${table(w.replies,[["Date","date"],["Who","who"],["What","what"]])}
+   <details><summary>Sent log (${(w.sent||[]).length})</summary>${table([...(w.sent||[])].reverse(),[["Date","date"],["Entry","entry"]])}</details>
+   <details><summary>Contact list (${(w.contacts||[]).length})</summary>${table(w.contacts,[["#","n"],["Name","name"],["Email","email"]])}</details></section>
+  <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
+   <h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
+  <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}</section>
+  <section class="card"><h2>🤖 Fleet</h2>${table(d.fleet,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}</section>
+  <section class="card"><h2>🅿️ Parked</h2><ul>${(d.parked||[]).map(p=>`<li>${esc(p.text)}</li>`).join("") || empty()}</ul></section>`;
+}
+
+app.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.todo) { const i = +t.dataset.todo, v = t.checked, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) x.done = v; }, "toggle to-do"); }
+  if (t.dataset.app) { const i = +t.dataset.app, v = t.value, k = data.jobs.applications[i].url; save(d => { const x = d.jobs.applications.find(a => a.url === k); if (x) x.status = v; }, "job status"); }
+});
+app.addEventListener("submit", e => { if (e.target.id !== "addtodo") return; e.preventDefault(); const text = e.target.t.value.trim(), id = "t" + Date.now(); save(d => { (d.todos ||= []).push({id, text, done: false}); }, "add to-do"); });
+$("#keyform").addEventListener("submit", e => { e.preventDefault(); localStorage.setItem(LO, $("#owner").value.trim()); localStorage.setItem(LS, $("#token").value.trim()); $("#token").value = ""; $("#keybox").hidden = true; load(); });
+$("#forget").onclick = () => { localStorage.removeItem(LS); data = null; app.innerHTML = ""; $("#keybox").hidden = false; st.textContent = "key forgotten"; };
+$("#reload").onclick = load;
+if (C.owner) $("#owner").value = C.owner;
+load().catch(err => st.textContent = "error: " + err.message);
+})();
