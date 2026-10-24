@@ -46,11 +46,12 @@ const QS = ["urgent-important","important-not-urgent","passion-project"], QL = {
 const qc = r => QS.includes(r?.quadrant) ? ` q-${r.quadrant}` : "";
 const qsel = (attr, r) => `<select class="qsel" ${attr} title="Quadrant"><option value="">untagged</option>${QS.map(q=>`<option value="${q}" ${r.quadrant===q?"selected":""}>${q}</option>`).join("")}</select>`;
 const CLOSED = /closed|rejected|fail|skip|retired|done/i;
+const trelloOpen = d => (d.trello||[]).filter(x=>!x.linked); // linked = duplicate of a seeded item (shown there)
 function openCards(d) { // open cards: logs (WSJ sent/contacts/replies) are history, not cards
   const w = d.wsj || {}, j = d.jobs || {};
   return [...(d.todos||[]).filter(t=>!t.done), ...(d.schedule||[]), ...(d.routines||[]), ...(w.next?[w.next]:[]),
     ...(j.shortlist||[]), ...(j.applications||[]).filter(a=>!CLOSED.test(a.status||"")), ...(d.trades||[]),
-    ...(d.fleet||[]).filter(f=>!CLOSED.test(f.state||"")), ...(d.parked||[])];
+    ...(d.fleet||[]).filter(f=>!CLOSED.test(f.state||"")), ...(d.parked||[]), ...trelloOpen(d)];
 }
 function qsummary(d) {
   const c = {"urgent-important":0,"important-not-urgent":0,"passion-project":0,untagged:0};
@@ -64,7 +65,12 @@ const link = (u, t) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener">$
 const ZDD_RE = /\bzdd\b|zero\s?drift|vera voice|workbook walter|trello scan|self-audit/i;
 const isZ = r => r && ((r.tags||[]).some(t => /zdd|zerodrift/i.test(t)) || r.project === "zdd" || ZDD_RE.test([r.text,r.name,r.bot,r.note].filter(Boolean).join(" ")));
 const ZDD_BOARD = "https://trello.com/b/fIYJQKlK/zerodrift-daily";
-const todoLi = (t,i) => `<li class="${qc(t).trim()}"><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label>${qsel(`data-tq="${i}"`, t)}</li>`;
+const todoLi = (t,i) => `<li class="${qc(t).trim()}"><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label>${t.trelloUrl?` <a class="tsmall" href="${esc(t.trelloUrl)}" target="_blank" rel="noopener">Trello ↗</a>`:""}${qsel(`data-tq="${i}"`, t)}</li>`;
+const fmtDue = s => { if (!s) return ""; const d = new Date(s), od = d < new Date(); return ` <span class="pill ${od?"billy":"warn"}">due ${d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}${od?" (overdue)":""}</span>`; };
+const tLi = x => `<li class="tcard${qc(x)}">${link(x.url, x.name)}${fmtDue(x.due)}<br><span class="tsmall">${esc(x.board)} · ${esc(x.list)}</span> ${qsel(`data-trq="${esc(x.id)}"`, x)}</li>`;
+const tList = (xs, msg) => xs.length ? `<ul class="tlist">${xs.map(tLi).join("")}</ul>` : (msg ? empty(msg) : "");
+const tBy = (d, sec) => trelloOpen(d).filter(x => x.section === sec);
+const tParked = xs => { const g = {}; xs.forEach(x => (g[x.board] ||= []).push(x)); return Object.entries(g).map(([b, v]) => `<details><summary>Trello: ${esc(b)} (${v.length})</summary>${tList(v)}</details>`).join(""); };
 function render() {
   const d = data, w = d.wsj || {}, j = d.jobs || {};
   qsummary(d);
@@ -75,39 +81,43 @@ function render() {
  <div class="col">
   <section class="card"><h2>✅ Today / to-dos</h2>
    <ul class="check">${todos.filter(([t])=>!isZ(t)).map(([t,i])=>todoLi(t,i)).join("") || empty()}</ul>
+   ${tBy(d,"today").length?`<h3>Trello</h3>${tList(tBy(d,"today"))}`:""}
    <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
  </div>
  <div class="col">
-  <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}</section>
+  <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}${tList(tBy(d,"trades"))}</section>
  </div>
  <div class="col">
   <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
-   <h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
+   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
  </div>
  <div class="col">
   <section class="card zdd"><h2>🌀 ZeroDrift Daily <a class="hlink" href="${ZDD_BOARD}" target="_blank" rel="noopener">Trello board ↗</a></h2>
+   <h3>Trello cards</h3>${tList(tBy(d,"zdd"),"No open ZDD Trello cards")}
    <h3>To-dos</h3><ul class="check">${zT.map(([t,i])=>todoLi(t,i)).join("") || empty("No ZDD to-dos yet")}</ul>
    <h3>Routines</h3>${zR.length ? table(zR,[["Routine","name"],["When","schedule"],["Status","status"]]) : empty("No ZDD routines yet")}
    <h3>Fleet</h3>${zF.length ? table(zF,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]]) : empty("No ZDD bots yet")}
    <h3>Parked</h3>${zP.length ? `<ul>${pList(zP)}</ul>` : empty("No ZDD parked items yet")}</section>
+  <section class="card"><h2>🧩 Projects <span class="tsmall">workbook · Chrome extension</span></h2>${tList(tBy(d,"projects"),"No project cards")}</section>
  </div>
  <div class="lower"><h2 class="lowh">Lower priority</h2><div class="lowgrid">
  <div class="col">
   <section class="card"><h2>🕒 Routines & schedule</h2><h3>Schedule</h3>${table(d.schedule,[["When","when"],["What","what"]])}
-   <h3>Routines</h3>${table(routines.filter(r=>!isZ(r)),[["Routine","name"],["When","schedule"],["Owner","owner"],["Status","status"]])}</section>
+   <h3>Routines</h3>${table(routines.filter(r=>!isZ(r)),[["Routine","name"],["When","schedule"],["Owner","owner"],["Status","status"]])}${tList(tBy(d,"routines"))}</section>
  </div>
  <div class="col">
   <section class="card"><h2>📨 WSJ hunt</h2>
    <h3>Next contact</h3>${w.next ? `<p class="${qc(w.next).trim()}" style="padding-left:8px"><b>#${esc(w.next.n)} ${esc(w.next.name)}</b><br>${esc(w.next.email)} · ${esc(w.next.phone)}<br>${esc(w.next.address)}</p>` : empty()}
+${tBy(d,"wsj").length?`<h3>Trello</h3>${tList(tBy(d,"wsj"))}`:""}
    <h3>Replies</h3>${table(w.replies,[["Date","date"],["Who","who"],["What","what"]])}
    <details><summary>Sent log (${(w.sent||[]).length})</summary>${table([...(w.sent||[])].reverse(),[["Date","date"],["Entry","entry"]])}</details>
    <details><summary>Contact list (${(w.contacts||[]).length})</summary>${table(w.contacts,[["#","n"],["Name","name"],["Email","email"]])}</details></section>
  </div>
  <div class="col">
-  <section class="card"><h2>🤖 Fleet</h2>${table(fleet.filter(f=>!isZ(f)),[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}</section>
+  <section class="card"><h2>🤖 Fleet</h2>${table(fleet.filter(f=>!isZ(f)),[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}${tList(tBy(d,"fleet"))}</section>
  </div>
  <div class="col">
-  <section class="card"><h2>🅿️ Parked</h2><ul>${pList(parked.filter(p=>!isZ(p))) || empty()}</ul></section>
+  <section class="card"><h2>🅿️ Parked</h2><ul>${pList(parked.filter(p=>!isZ(p))) || empty()}</ul>${tParked(tBy(d,"parked"))}</section>
  </div>
  </div></div>`;
 }
@@ -116,6 +126,7 @@ app.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.todo) { const i = +t.dataset.todo, v = t.checked, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) x.done = v; }, "toggle to-do"); }
   if (t.dataset.tq) { const i = +t.dataset.tq, v = t.value, id = data.todos[i].id; save(d => { const x = d.todos.find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "to-do quadrant"); }
+  if (t.dataset.trq) { const id = t.dataset.trq, v = t.value; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "trello quadrant"); }
   if (t.dataset.app) { const i = +t.dataset.app, v = t.value, k = data.jobs.applications[i].url; save(d => { const x = d.jobs.applications.find(a => a.url === k); if (x) x.status = v; }, "job status"); }
 });
 app.addEventListener("submit", e => { if (e.target.id !== "addtodo") return; e.preventDefault(); const text = e.target.t.value.trim(), id = "t" + Date.now(); save(d => { (d.todos ||= []).push({id, text, done: false}); }, "add to-do"); });
