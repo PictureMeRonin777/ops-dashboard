@@ -76,6 +76,8 @@ function render() {
   <section class="card"><h2>✅ Today / to-dos</h2>
    <ul class="check">${todos.filter(([t])=>!isZ(t)).map(([t,i])=>todoLi(t,i)).join("") || empty()}</ul>
    <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
+ </div>
+ <div class="col">
   <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}</section>
  </div>
  <div class="col">
@@ -89,17 +91,25 @@ function render() {
    <h3>Fleet</h3>${zF.length ? table(zF,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]]) : empty("No ZDD bots yet")}
    <h3>Parked</h3>${zP.length ? `<ul>${pList(zP)}</ul>` : empty("No ZDD parked items yet")}</section>
  </div>
+ <div class="lower"><h2 class="lowh">Lower priority</h2><div class="lowgrid">
  <div class="col">
   <section class="card"><h2>🕒 Routines & schedule</h2><h3>Schedule</h3>${table(d.schedule,[["When","when"],["What","what"]])}
    <h3>Routines</h3>${table(routines.filter(r=>!isZ(r)),[["Routine","name"],["When","schedule"],["Owner","owner"],["Status","status"]])}</section>
+ </div>
+ <div class="col">
   <section class="card"><h2>📨 WSJ hunt</h2>
    <h3>Next contact</h3>${w.next ? `<p class="${qc(w.next).trim()}" style="padding-left:8px"><b>#${esc(w.next.n)} ${esc(w.next.name)}</b><br>${esc(w.next.email)} · ${esc(w.next.phone)}<br>${esc(w.next.address)}</p>` : empty()}
    <h3>Replies</h3>${table(w.replies,[["Date","date"],["Who","who"],["What","what"]])}
    <details><summary>Sent log (${(w.sent||[]).length})</summary>${table([...(w.sent||[])].reverse(),[["Date","date"],["Entry","entry"]])}</details>
    <details><summary>Contact list (${(w.contacts||[]).length})</summary>${table(w.contacts,[["#","n"],["Name","name"],["Email","email"]])}</details></section>
+ </div>
+ <div class="col">
   <section class="card"><h2>🤖 Fleet</h2>${table(fleet.filter(f=>!isZ(f)),[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}</section>
+ </div>
+ <div class="col">
   <section class="card"><h2>🅿️ Parked</h2><ul>${pList(parked.filter(p=>!isZ(p))) || empty()}</ul></section>
- </div>`;
+ </div>
+ </div></div>`;
 }
 
 app.addEventListener("change", e => {
