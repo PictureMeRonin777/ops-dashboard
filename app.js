@@ -60,25 +60,46 @@ function qsummary(d) {
 }
 const link = (u, t) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t);
 
+// ZeroDrift Daily: client-side filter by text or tag; shown in the ZDD column, excluded from generic sections
+const ZDD_RE = /\bzdd\b|zero\s?drift|vera voice|workbook walter|trello scan|self-audit/i;
+const isZ = r => r && ((r.tags||[]).some(t => /zdd|zerodrift/i.test(t)) || r.project === "zdd" || ZDD_RE.test([r.text,r.name,r.bot,r.note].filter(Boolean).join(" ")));
+const ZDD_BOARD = "https://trello.com/b/fIYJQKlK/zerodrift-daily";
+const todoLi = (t,i) => `<li class="${qc(t).trim()}"><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label>${qsel(`data-tq="${i}"`, t)}</li>`;
 function render() {
   const d = data, w = d.wsj || {}, j = d.jobs || {};
   qsummary(d);
+  const todos = (d.todos||[]).map((t,i)=>[t,i]), routines = d.routines||[], fleet = d.fleet||[], parked = d.parked||[];
+  const zT = todos.filter(([t])=>isZ(t)), zR = routines.filter(isZ), zF = fleet.filter(isZ), zP = parked.filter(isZ);
+  const pList = ps => ps.map(p=>`<li class="${qc(p).trim()}">${esc(p.text)}</li>`).join("");
   app.innerHTML = `
+ <div class="col">
   <section class="card"><h2>✅ Today / to-dos</h2>
-   <ul class="check">${(d.todos||[]).map((t,i) => `<li class="${qc(t).trim()}"><label class="${t.done?"done":""}"><input type="checkbox" data-todo="${i}" ${t.done?"checked":""}> ${esc(t.text)}</label>${qsel(`data-tq="${i}"`, t)}</li>`).join("") || empty()}</ul>
+   <ul class="check">${todos.filter(([t])=>!isZ(t)).map(([t,i])=>todoLi(t,i)).join("") || empty()}</ul>
    <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
+  <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}</section>
+ </div>
+ <div class="col">
+  <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
+   <h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
+ </div>
+ <div class="col">
+  <section class="card zdd"><h2>🌀 ZeroDrift Daily <a class="hlink" href="${ZDD_BOARD}" target="_blank" rel="noopener">Trello board ↗</a></h2>
+   <h3>To-dos</h3><ul class="check">${zT.map(([t,i])=>todoLi(t,i)).join("") || empty("No ZDD to-dos yet")}</ul>
+   <h3>Routines</h3>${zR.length ? table(zR,[["Routine","name"],["When","schedule"],["Status","status"]]) : empty("No ZDD routines yet")}
+   <h3>Fleet</h3>${zF.length ? table(zF,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]]) : empty("No ZDD bots yet")}
+   <h3>Parked</h3>${zP.length ? `<ul>${pList(zP)}</ul>` : empty("No ZDD parked items yet")}</section>
+ </div>
+ <div class="col">
   <section class="card"><h2>🕒 Routines & schedule</h2><h3>Schedule</h3>${table(d.schedule,[["When","when"],["What","what"]])}
-   <h3>Routines</h3>${table(d.routines,[["Routine","name"],["When","schedule"],["Owner","owner"],["Status","status"]])}</section>
+   <h3>Routines</h3>${table(routines.filter(r=>!isZ(r)),[["Routine","name"],["When","schedule"],["Owner","owner"],["Status","status"]])}</section>
   <section class="card"><h2>📨 WSJ hunt</h2>
    <h3>Next contact</h3>${w.next ? `<p class="${qc(w.next).trim()}" style="padding-left:8px"><b>#${esc(w.next.n)} ${esc(w.next.name)}</b><br>${esc(w.next.email)} · ${esc(w.next.phone)}<br>${esc(w.next.address)}</p>` : empty()}
    <h3>Replies</h3>${table(w.replies,[["Date","date"],["Who","who"],["What","what"]])}
    <details><summary>Sent log (${(w.sent||[]).length})</summary>${table([...(w.sent||[])].reverse(),[["Date","date"],["Entry","entry"]])}</details>
    <details><summary>Contact list (${(w.contacts||[]).length})</summary>${table(w.contacts,[["#","n"],["Name","name"],["Email","email"]])}</details></section>
-  <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
-   <h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
-  <section class="card"><h2>📈 Trades</h2>${table(d.trades,[["Ticker","ticker"],["Position","position"],["Status","status"]]).replace("Nothing here.","No open trades.")}</section>
-  <section class="card"><h2>🤖 Fleet</h2>${table(d.fleet,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}</section>
-  <section class="card"><h2>🅿️ Parked</h2><ul>${(d.parked||[]).map(p=>`<li class="${qc(p).trim()}">${esc(p.text)}</li>`).join("") || empty()}</ul></section>`;
+  <section class="card"><h2>🤖 Fleet</h2>${table(fleet.filter(f=>!isZ(f)),[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}</section>
+  <section class="card"><h2>🅿️ Parked</h2><ul>${pList(parked.filter(p=>!isZ(p))) || empty()}</ul></section>
+ </div>`;
 }
 
 app.addEventListener("change", e => {
