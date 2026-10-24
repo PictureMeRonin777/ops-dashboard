@@ -51,7 +51,7 @@ function openCards(d) { // open cards: logs (WSJ sent/contacts/replies) are hist
   const w = d.wsj || {}, j = d.jobs || {};
   return [...(d.todos||[]).filter(t=>!t.done), ...(d.schedule||[]), ...(d.routines||[]), ...(w.next?[w.next]:[]),
     ...(j.shortlist||[]), ...(j.applications||[]).filter(a=>!CLOSED.test(a.status||"")), ...(d.trades||[]),
-    ...(d.fleet||[]).filter(f=>!CLOSED.test(f.state||"")), ...(d.parked||[]), ...trelloOpen(d)];
+    ...(d.fleet||[]).filter(f=>!CLOSED.test(f.state||"")), ...(d.parked||[]), ...trelloOpen(d).filter(x=>x.section==="cwo")]; // completed + backlog cards excluded from quadrant counts
 }
 function qsummary(d) {
   const c = {"urgent-important":0,"important-not-urgent":0,"passion-project":0,untagged:0};
@@ -93,12 +93,12 @@ function render() {
  </div>
  <div class="col">
   <section class="card zdd"><h2>🌀 ZeroDrift Daily <a class="hlink" href="${ZDD_BOARD}" target="_blank" rel="noopener">Trello board ↗</a></h2>
-   <h3>Trello cards</h3>${tList(tBy(d,"zdd"),"No open ZDD Trello cards")}
+   <h3>Currently Working On</h3>${tList(tBy(d,"cwo"),"Nothing in Currently Working On")}
    <h3>To-dos</h3><ul class="check">${zT.map(([t,i])=>todoLi(t,i)).join("") || empty("No ZDD to-dos yet")}</ul>
    <h3>Routines</h3>${zR.length ? table(zR,[["Routine","name"],["When","schedule"],["Status","status"]]) : empty("No ZDD routines yet")}
    <h3>Fleet</h3>${zF.length ? table(zF,[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]]) : empty("No ZDD bots yet")}
    <h3>Parked</h3>${zP.length ? `<ul>${pList(zP)}</ul>` : empty("No ZDD parked items yet")}</section>
-  <section class="card"><h2>🧩 Projects <span class="tsmall">workbook · Chrome extension</span></h2>${tList(tBy(d,"projects"),"No project cards")}</section>
+  <section class="card completed"><h2>☑️ Completed <span class="tsmall">checked off in Currently Working On</span></h2>${tBy(d,"completed").length ? `<ul class="tlist">${tBy(d,"completed").map(x=>`<li class="done">${link(x.url,x.name)}<br><span class="tsmall">${esc(x.board)} · ${esc(x.list)}</span></li>`).join("")}</ul>` : empty("No completed cards")}</section>
  </div>
  <div class="lower"><h2 class="lowh">Lower priority</h2><div class="lowgrid">
  <div class="col">
@@ -117,9 +117,15 @@ ${tBy(d,"wsj").length?`<h3>Trello</h3>${tList(tBy(d,"wsj"))}`:""}
   <section class="card"><h2>🤖 Fleet</h2>${table(fleet.filter(f=>!isZ(f)),[["Bot","bot"],["State","",r=>pill(r.state)],["Note","note"]])}${tList(tBy(d,"fleet"))}</section>
  </div>
  <div class="col">
+  <section class="card backlog"><details><summary><b>🗂️ Backlog</b> (${tBy(d,"backlog").length})</summary>${tList(tBy(d,"backlog"),"Backlog is empty")}</details></section>
+ </div>
+ </div>
+ <div class="parkedrow">
+ <div class="col">
   <section class="card"><h2>🅿️ Parked</h2><ul>${pList(parked.filter(p=>!isZ(p))) || empty()}</ul>${tParked(tBy(d,"parked"))}</section>
  </div>
- </div></div>`;
+ </div>
+ </div>`;
 }
 
 app.addEventListener("change", e => {
