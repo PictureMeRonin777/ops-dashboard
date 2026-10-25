@@ -1,4 +1,5 @@
 (() => {
+const BUILD = "jobsort2"; // shown in status line so a stale cached app.js is obvious
 const C = window.OPS_CONFIG, LS = "opsdash.key", LO = "opsdash.owner";
 const $ = s => document.querySelector(s), app = $("#app"), st = $("#status");
 const params = new URLSearchParams(location.search);
@@ -13,12 +14,12 @@ const b64e = s => { const u = new TextEncoder().encode(s); let r = ""; for (cons
 
 async function load() {
   st.textContent = "loading…";
-  if (MOCK) { data = await (await fetch(params.get("mock") || "../ops-data/data.json", {cache:"no-store"})).json(); st.textContent = "MOCK mode (local seed, edits not saved)"; return render(); }
+  if (MOCK) { data = await (await fetch(params.get("mock") || "../ops-data/data.json", {cache:"no-store"})).json(); st.textContent = `MOCK mode (local seed, edits not saved) · build ${BUILD}`; return render(); }
   if (!localStorage.getItem(LS) || !owner()) { $("#keybox").hidden = false; st.textContent = "needs key"; return; }
   const r = await fetch(`${api()}?ref=${C.branch}`, {headers: hdr(), cache: "no-store"});
   if (r.status === 401 || r.status === 403 || r.status === 404) { st.textContent = `GitHub said ${r.status}: check the key or repo name`; $("#keybox").hidden = false; return; }
   const j = await r.json(); sha = j.sha; data = JSON.parse(b64d(j.content));
-  st.textContent = `synced ${new Date().toLocaleTimeString()}`; render();
+  st.textContent = `synced ${new Date().toLocaleTimeString()} · build ${BUILD}`; render();
 }
 
 // mutate: function applied to data; on 409/422 conflict refetch, reapply, retry
@@ -28,7 +29,7 @@ async function save(mutate, msg) {
   for (let i = 0; i < 3; i++) {
     st.textContent = "saving…";
     data.updated = new Date().toISOString();
-    const r = await fetch(api(), {method: "PUT", headers: hdr(), body: JSON.stringify({message: msg || "dashboard edit", content: b64e(JSON.stringify(data, null, 1)), sha, branch: C.branch})});
+    const r = await fetch(api(), {method: "PUT", headers: hdr(), body: JSON.stringify({message: msg || "dashboard edit", content: b64e(JSON.stringify(data, (k,v)=>k==="__n"?undefined:v, 1)), sha, branch: C.branch})});
     if (r.ok) { sha = (await r.json()).content.sha; st.textContent = `saved ${new Date().toLocaleTimeString()}`; return; }
     if (r.status === 409 || r.status === 422) {
       const g = await (await fetch(`${api()}?ref=${C.branch}`, {headers: hdr(), cache: "no-store"})).json();
@@ -92,7 +93,7 @@ function render() {
  <div class="col">
   <section class="card"><h2>💼 Job pipeline <button type="button" id="jobexport" title="Download job instructions JSON for Codex (all roles)">Export JSON</button> <button type="button" id="jobfeedback" title="I exported the JSON and sent it to Codex; clear this batch">Submitted Codex Feedback</button></h2>
    ${(j.shortlist||[]).length?`<h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}`:""}
-   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${(j.applications||[]).length ? table(jobSort(j.applications),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>jobSel(r, j.applications.indexOf(r))],["Note","",r=>`<input class="jnote" data-jnote="${j.applications.indexOf(r)}" value="${esc(r.note||"")}" placeholder="note for Codex">`]]) : empty(`Waiting for the next Codex email handoff${j.feedbackSubmittedAt?` (feedback submitted ${esc(j.feedbackSubmittedAt)})`:""}.`)}</section>
+   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${(j.applications||[]).length ? table(jobSort(j.applications).map((r,n)=>(r.__n=n+1,r)),[["#","",r=>String(r.__n)],["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>jobSel(r, j.applications.indexOf(r))],["Note","",r=>`<input class="jnote" data-jnote="${j.applications.indexOf(r)}" value="${esc(r.note||"")}" placeholder="note for Codex">`]]) : empty(`Waiting for the next Codex email handoff${j.feedbackSubmittedAt?` (feedback submitted ${esc(j.feedbackSubmittedAt)})`:""}.`)}</section>
   <section class="card sponsors"><h2>🤝 Sponsor leads</h2>${(d.sponsorLeads||[]).length ? `<ul class="tlist">${[...d.sponsorLeads].sort((a,b)=>a.rank-b.rank).map(x=>`<li class="${x.done?"done":""}"><label><input type="checkbox" data-sl="${esc(x.id)}" ${x.done?"checked":""} title="Applied / done"> <b>#${esc(x.rank)}</b> ${link(x.url,x.brand)}</label> <span class="tsmall">applied/done</span><br>${esc(x.offer)}<br><span class="tsmall">${esc(x.eligibility)}</span><br><span class="tsmall">Next: ${esc(x.nextStep)}</span></li>`).join("")}</ul>` : empty("No sponsor leads")}
    <p class="tsmall"><a href="https://cursor.com/canvas/store-dcf0a6f8-e310-4fdc-b774-d13dd728b8b1/33d2f834-edb8-4139-882e-70345c2cd41c" target="_blank" rel="noopener">Sponsorship plan ↗</a></p></section>
  </div>
