@@ -88,7 +88,7 @@ function render() {
  </div>
  <div class="col">
   <section class="card"><h2>💼 Job pipeline <button type="button" id="jobexport" title="Download job status JSON (all roles, incl. hidden)">Export JSON</button></h2><h3>Shortlist</h3>${table((j.shortlist||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
-   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table((j.applications||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","skipped_over","closed","apply_now","remove"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
+   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table((j.applications||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","skipped_over","closed","apply_now","remove"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`],["Note","",r=>`<input class="jnote" data-jnote="${j.applications.indexOf(r)}" value="${esc(r.note||"")}" placeholder="note for Codex">`]])}</section>
   <section class="card sponsors"><h2>🤝 Sponsor leads</h2>${(d.sponsorLeads||[]).length ? `<ul class="tlist">${[...d.sponsorLeads].sort((a,b)=>a.rank-b.rank).map(x=>`<li class="${x.done?"done":""}"><label><input type="checkbox" data-sl="${esc(x.id)}" ${x.done?"checked":""} title="Applied / done"> <b>#${esc(x.rank)}</b> ${link(x.url,x.brand)}</label> <span class="tsmall">applied/done</span><br>${esc(x.offer)}<br><span class="tsmall">${esc(x.eligibility)}</span><br><span class="tsmall">Next: ${esc(x.nextStep)}</span></li>`).join("")}</ul>` : empty("No sponsor leads")}
    <p class="tsmall"><a href="https://cursor.com/canvas/store-dcf0a6f8-e310-4fdc-b774-d13dd728b8b1/33d2f834-edb8-4139-882e-70345c2cd41c" target="_blank" rel="noopener">Sponsorship plan ↗</a></p></section>
  </div>
@@ -139,17 +139,28 @@ app.addEventListener("change", e => {
   if (t.dataset.tdone) { const id = t.dataset.tdone, v = t.checked; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) { x.done = true; x.doneAt = new Date().toISOString(); } else { delete x.done; delete x.doneAt; } } }, v ? "check trello card done" : "uncheck trello card"); }
   if (t.dataset.trq) { const id = t.dataset.trq, v = t.value; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "trello quadrant"); }
   if (t.dataset.sl) { const id = t.dataset.sl, v = t.checked; save(d => { const x = (d.sponsorLeads||[]).find(q => q.id === id); if (x) { x.done = v; x.doneAt = v ? new Date().toISOString() : null; } }, v ? "sponsor lead applied" : "uncheck sponsor lead"); }
+  if (t.dataset.jnote) { const r0 = data.jobs.applications[+t.dataset.jnote], id = r0.role_id, k = r0.url, v = t.value.trim(); save(d => { const x = d.jobs.applications.find(a => id ? a.role_id === id : a.url === k); if (x) { if (v) x.note = v; else delete x.note; } }, "job note"); }
   if (t.dataset.app) { const i = +t.dataset.app, v = t.value, r0 = data.jobs.applications[i], id = r0.role_id, k = r0.url; save(d => { const x = d.jobs.applications.find(a => id ? a.role_id === id : a.url === k); if (x) x.status = v; }, "job status"); }
 });
-// Export: Codex job-status response schema + one extra per-result field, dashboard_status. Job data only.
-const RK = ["role_id","employer","role_title","status","recommendation","employer_posting_url","location","work_model","compensation","application_status","fit_update","cautions","evidence","confidence"];
+// Export: command list for Codex to update Billy's job sheet (schemas/job-instructions.schema.json). Job data only.
+const ACT = {apply_now:["APPLY","Apply to this role."], submitted:["MARK_APPLIED","Mark this role as applied on the job sheet."], skipped_over:["SKIP","Mark this role as skipped on the job sheet; do not apply."], closed:["MARK_CLOSED","Mark this role as closed on the job sheet; the posting is no longer live."], remove:["REMOVE","Remove this role's row from the job sheet."]};
+const SCAN = "Before dropping this row, evaluate this employer: decide whether it is valuable enough to scan for other openings that fit Billy's criteria (CS / onboarding / implementation / enablement / support+success hybrid, Austin or remote open to Texas, full-time, $70k+). If yes, scan its own careers board and add qualifying roles to the sheet as new rows; if no, note why.";
+const normS = s => String(s ?? "").toLowerCase().replace(/[\s-]+/g,"_").trim();
+function chiNow() {
+  const t = new Date(), f = new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23",timeZoneName:"longOffset"});
+  const p = Object.fromEntries(f.formatToParts(t).map(x => [x.type, x.value])), off = (p.timeZoneName.replace("GMT","") || "+00:00");
+  return {date:`${p.year}-${p.month}-${p.day}`, iso:`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${off}`};
+}
 function jobExport() {
-  const j = data.jobs || {};
-  const results = (j.applications||[]).filter(a => a.handoff).map(a => { const o = {}; for (const k of RK) o[k] = a.handoff[k]; o.dashboard_status = a.status; return o; });
-  const out = {checked_at: j.lastHandoff?.checked_at || "", results};
+  const j = data.jobs || {}, now = chiNow(), lh = j.lastHandoff || {};
+  const actions = (j.applications||[]).filter(a => a.role_id && ACT[normS(a.status)]).map(a => { const ds = normS(a.status), [action, instruction] = ACT[ds];
+    return {role_id:a.role_id, employer:a.company||"", title:a.title||"", action, dashboard_status:ds, instruction, posting_url:a.url||null, note:(a.note||"").trim()||null, ...(action === "REMOVE" ? {analyze_company_for_other_roles:true, company_scan_instruction:SCAN} : {})}; });
+  const summary = Object.fromEntries(Object.values(ACT).map(([k]) => [k, actions.filter(x => x.action === k).length]));
+  const out = {schema:"grokbot-job-instructions", schema_version:"1.0", generated_at:now.iso, source_handoff:{message_id:String(lh.message_id||""), date:String(lh.date||"")},
+    instructions_for_codex:"For each item in actions, find the job-sheet row by role_id (confirm with employer and title) and do what action says: APPLY = the role is queued for Billy to apply to; set its status so it is ready to apply. MARK_APPLIED = mark the row applied. SKIP = mark the row skipped and do not apply. MARK_CLOSED = mark the row closed (the posting is no longer live). REMOVE = first follow company_scan_instruction (decide whether the employer is worth scanning for other roles that fit Billy, and add qualifying roles as new rows or note why not), then delete the row. Add note to the row when it is not null. Change nothing else, and do not submit applications or contact anyone.",
+    actions, summary};
   const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], {type: "application/json"}));
-  const t = new Date(), ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
-  const el = Object.assign(document.createElement("a"), {href: url, download: `job-status-export-${ds}.json`}); document.body.append(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const el = Object.assign(document.createElement("a"), {href: url, download: `job-instructions-${now.date}.json`}); document.body.append(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 app.addEventListener("click", e => { if (e.target.id === "jobexport") jobExport(); });
 app.addEventListener("submit", e => { if (e.target.id !== "addtodo") return; e.preventDefault(); const text = e.target.t.value.trim(), id = "t" + Date.now(); save(d => { (d.todos ||= []).push({id, text, done: false}); }, "add to-do"); });

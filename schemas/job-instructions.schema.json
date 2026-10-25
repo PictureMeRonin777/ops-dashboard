@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://picturemeronin777.github.io/ops-dashboard/schemas/job-instructions.schema.json",
+  "title": "Grokbot job instructions for Codex",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "generated_at",
+    "source_handoff",
+    "instructions_for_codex",
+    "actions",
+    "summary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "grokbot-job-instructions"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-]\\d{2}:\\d{2}$"
+    },
+    "source_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message_id",
+        "date"
+      ],
+      "properties": {
+        "message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+      }
+    },
+    "instructions_for_codex": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role_id",
+          "employer",
+          "title",
+          "action",
+          "dashboard_status",
+          "instruction",
+          "posting_url",
+          "note"
+        ],
+        "properties": {
+          "role_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "employer": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "APPLY",
+              "MARK_APPLIED",
+              "SKIP",
+              "MARK_CLOSED",
+              "REMOVE"
+            ]
+          },
+          "dashboard_status": {
+            "enum": [
+              "apply_now",
+              "submitted",
+              "skipped_over",
+              "closed",
+              "remove"
+            ]
+          },
+          "instruction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "posting_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "analyze_company_for_other_roles": {
+            "const": true
+          },
+          "company_scan_instruction": {
+            "const": "Before dropping this row, evaluate this employer: decide whether it is valuable enough to scan for other openings that fit Billy's criteria (CS / onboarding / implementation / enablement / support+success hybrid, Austin or remote open to Texas, full-time, $70k+). If yes, scan its own careers board and add qualifying roles to the sheet as new rows; if no, note why."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "dashboard_status": {
+                  "const": "apply_now"
+                }
+              },
+              "required": [
+                "dashboard_status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "const": "APPLY"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dashboard_status": {
+                  "const": "submitted"
+                }
+              },
+              "required": [
+                "dashboard_status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "const": "MARK_APPLIED"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dashboard_status": {
+                  "const": "skipped_over"
+                }
+              },
+              "required": [
+                "dashboard_status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "const": "SKIP"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dashboard_status": {
+                  "const": "closed"
+                }
+              },
+              "required": [
+                "dashboard_status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "const": "MARK_CLOSED"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dashboard_status": {
+                  "const": "remove"
+                }
+              },
+              "required": [
+                "dashboard_status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "const": "REMOVE"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "REMOVE"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "analyze_company_for_other_roles",
+                "company_scan_instruction"
+              ]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "analyze_company_for_other_roles"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "company_scan_instruction"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "APPLY",
+        "MARK_APPLIED",
+        "SKIP",
+        "MARK_CLOSED",
+        "REMOVE"
+      ],
+      "properties": {
+        "APPLY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MARK_APPLIED": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "SKIP": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "MARK_CLOSED": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "REMOVE": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
