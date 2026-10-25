@@ -40,12 +40,14 @@ async function save(mutate, msg) {
 }
 
 const empty = t => `<p class="empty">${t || "Nothing here."}</p>`;
-const pill = s => { const k = /submit|active|done|ok|shortlist/i.test(s) ? "ok" : /needs|billy/i.test(s) ? "billy" : /closed|retired|fail|skip/i.test(s) ? "muted" : "warn"; return `<span class="pill ${k}">${esc(s)}</span>`; };
+const pill = s => { const k = /submit|active|done|ok|shortlist/i.test(s) ? "ok" : /needs|billy|apply.?now/i.test(s) ? "billy" : /closed|retired|fail|skip/i.test(s) ? "muted" : "warn"; return `<span class="pill ${k}">${esc(s)}</span>`; };
 const table = (rows, cols) => rows?.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr>${rows.map(r => `<tr class="${qc(r).trim()}">${cols.map(c => `<td>${c[2] ? c[2](r) : esc(r[c[1]])}</td>`).join("")}</tr>`).join("")}</table>` : empty();
 const QS = ["urgent-important","important-not-urgent","passion-project"], QL = {"urgent-important":"Urgent+important","important-not-urgent":"Important, not urgent","passion-project":"Passion project"};
 const qc = r => QS.includes(r?.quadrant) ? ` q-${r.quadrant}` : "";
 const qsel = (attr, r) => `<select class="qsel" ${attr} title="Quadrant"><option value="">untagged</option>${QS.map(q=>`<option value="${q}" ${r.quadrant===q?"selected":""}>${q}</option>`).join("")}</select>`;
 const CLOSED = /closed|rejected|fail|skip|retired|done/i;
+const JOB_OK = new Set(["submitted","skipped over","closed","apply now"]); // Job Pipeline shows only actionable statuses
+const jobOk = r => JOB_OK.has(String(r?.status ?? "").toLowerCase().replace(/[\s_-]+/g," ").trim());
 const trelloOpen = d => (d.trello||[]).filter(x=>!x.linked); // linked = duplicate of a seeded item (shown there)
 function openCards(d) { // open cards: logs (WSJ sent/contacts/replies) are history, not cards
   const w = d.wsj || {}, j = d.jobs || {};
@@ -85,8 +87,8 @@ function render() {
    <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
  </div>
  <div class="col">
-  <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
-   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table(j.applications,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","interviewing","offer","rejected","closed","needs_input"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
+  <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table((j.shortlist||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
+   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table((j.applications||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","skipped_over","closed","apply_now"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
   <section class="card sponsors"><h2>🤝 Sponsor leads</h2>${(d.sponsorLeads||[]).length ? `<ul class="tlist">${[...d.sponsorLeads].sort((a,b)=>a.rank-b.rank).map(x=>`<li class="${x.done?"done":""}"><label><input type="checkbox" data-sl="${esc(x.id)}" ${x.done?"checked":""} title="Applied / done"> <b>#${esc(x.rank)}</b> ${link(x.url,x.brand)}</label> <span class="tsmall">applied/done</span><br>${esc(x.offer)}<br><span class="tsmall">${esc(x.eligibility)}</span><br><span class="tsmall">Next: ${esc(x.nextStep)}</span></li>`).join("")}</ul>` : empty("No sponsor leads")}
    <p class="tsmall"><a href="https://cursor.com/canvas/store-dcf0a6f8-e310-4fdc-b774-d13dd728b8b1/33d2f834-edb8-4139-882e-70345c2cd41c" target="_blank" rel="noopener">Sponsorship plan ↗</a></p></section>
  </div>
