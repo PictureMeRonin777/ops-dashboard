@@ -18,7 +18,7 @@
       "const": "grokbot-job-instructions"
     },
     "schema_version": {
-      "const": "1.0"
+      "const": "1.1"
     },
     "generated_at": {
       "type": "string",
@@ -83,10 +83,11 @@
           },
           "dashboard_status": {
             "enum": [
-              "apply_now",
               "submitted",
               "skipped_over",
-              "closed",
+              "closed_detected",
+              "closed_by_human",
+              "apply_now",
               "remove"
             ]
           },
@@ -114,25 +115,6 @@
           }
         },
         "allOf": [
-          {
-            "if": {
-              "properties": {
-                "dashboard_status": {
-                  "const": "apply_now"
-                }
-              },
-              "required": [
-                "dashboard_status"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "const": "APPLY"
-                }
-              }
-            }
-          },
           {
             "if": {
               "properties": {
@@ -175,7 +157,7 @@
             "if": {
               "properties": {
                 "dashboard_status": {
-                  "const": "closed"
+                  "const": "closed_detected"
                 }
               },
               "required": [
@@ -186,6 +168,44 @@
               "properties": {
                 "action": {
                   "const": "MARK_CLOSED"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dashboard_status": {
+                  "const": "closed_by_human"
+                }
+              },
+              "required": [
+                "dashboard_status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "const": "MARK_CLOSED"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dashboard_status": {
+                  "const": "apply_now"
+                }
+              },
+              "required": [
+                "dashboard_status"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "const": "APPLY"
                 }
               }
             }
