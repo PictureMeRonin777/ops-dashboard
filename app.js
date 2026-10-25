@@ -1,5 +1,5 @@
 (() => {
-const BUILD = "jobsort2"; // shown in status line so a stale cached app.js is obvious
+const BUILD = "jobsort3"; // shown in status line so a stale cached app.js is obvious
 const C = window.OPS_CONFIG, LS = "opsdash.key", LO = "opsdash.owner";
 const $ = s => document.querySelector(s), app = $("#app"), st = $("#status");
 const params = new URLSearchParams(location.search);
@@ -51,6 +51,7 @@ const JOB_ST = ["submitted","skipped_over","closed_detected","closed_by_human","
 const jnorm = s => String(s ?? "").toLowerCase().replace(/[\s_-]+/g,"_").replace(/^_|_$/g,"");
 const JOB_PRI = ["apply_now","submitted","skipped_over","remove","closed_by_human","closed_detected"]; // default render order; unknown last
 const jobSort = rows => (rows||[]).map((r,i)=>[r,i]).sort((a,b)=>{ const pa=JOB_PRI.indexOf(jnorm(a[0].status)), pb=JOB_PRI.indexOf(jnorm(b[0].status)); return ((pa<0?99:pa)-(pb<0?99:pb)) || (a[1]-b[1]); }).map(x=>x[0]); // stable, sorts a copy
+const batchLbl = r => { const b = String(r.batch || r.source || ""); const m = b.match(/batch([A-Z0-9]+)$/i); return m ? m[1] : (b.startsWith("codex-") ? "1" : (b || "?")); };
 const jobSel = (r, i) => { const n = jnorm(r.status), opts = JOB_ST.includes(n) ? JOB_ST : [r.status, ...JOB_ST]; return `<select data-app="${i}">${opts.map(s=>`<option value="${esc(s)}" ${(s===n||s===r.status)?"selected":""}>${esc(String(s??"").replace(/_/g," "))}</option>`).join("")}</select>`; };
 const trelloOpen = d => (d.trello||[]).filter(x=>!x.linked); // linked = duplicate of a seeded item (shown there)
 function openCards(d) { // open cards: logs (WSJ sent/contacts/replies) are history, not cards
@@ -93,7 +94,7 @@ function render() {
  <div class="col">
   <section class="card"><h2>💼 Job pipeline <button type="button" id="jobexport" title="Download job instructions JSON for Codex (all roles)">Export JSON</button> <button type="button" id="jobfeedback" title="I exported the JSON and sent it to Codex; clear this batch">Submitted Codex Feedback</button></h2>
    ${(j.shortlist||[]).length?`<h3>Shortlist</h3>${table(j.shortlist,[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}`:""}
-   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${(j.applications||[]).length ? table(jobSort(j.applications).map((r,n)=>(r.__n=n+1,r)),[["#","",r=>String(r.__n)],["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>jobSel(r, j.applications.indexOf(r))],["Note","",r=>`<input class="jnote" data-jnote="${j.applications.indexOf(r)}" value="${esc(r.note||"")}" placeholder="note for Codex">`]]) : empty(`Waiting for the next Codex email handoff${j.feedbackSubmittedAt?` (feedback submitted ${esc(j.feedbackSubmittedAt)})`:""}.`)}</section>
+   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${(j.applications||[]).length ? table(jobSort(j.applications).map((r,n)=>(r.__n=n+1,r)),[["#","",r=>String(r.__n)],["Batch","",r=>`<span class="pill muted" title="${esc(r.batch||r.source||"")}">${esc(batchLbl(r))}</span>`],["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>jobSel(r, j.applications.indexOf(r))],["Note","",r=>`<input class="jnote" data-jnote="${j.applications.indexOf(r)}" value="${esc(r.note||"")}" placeholder="note for Codex">`]]) : empty(`Waiting for the next Codex email handoff${j.feedbackSubmittedAt?` (feedback submitted ${esc(j.feedbackSubmittedAt)})`:""}.`)}</section>
   <section class="card sponsors"><h2>🤝 Sponsor leads</h2>${(d.sponsorLeads||[]).length ? `<ul class="tlist">${[...d.sponsorLeads].sort((a,b)=>a.rank-b.rank).map(x=>`<li class="${x.done?"done":""}"><label><input type="checkbox" data-sl="${esc(x.id)}" ${x.done?"checked":""} title="Applied / done"> <b>#${esc(x.rank)}</b> ${link(x.url,x.brand)}</label> <span class="tsmall">applied/done</span><br>${esc(x.offer)}<br><span class="tsmall">${esc(x.eligibility)}</span><br><span class="tsmall">Next: ${esc(x.nextStep)}</span></li>`).join("")}</ul>` : empty("No sponsor leads")}
    <p class="tsmall"><a href="https://cursor.com/canvas/store-dcf0a6f8-e310-4fdc-b774-d13dd728b8b1/33d2f834-edb8-4139-882e-70345c2cd41c" target="_blank" rel="noopener">Sponsorship plan ↗</a></p></section>
  </div>
@@ -156,14 +157,21 @@ function chiNow() {
   const p = Object.fromEntries(f.formatToParts(t).map(x => [x.type, x.value])), off = (p.timeZoneName.replace("GMT","") || "+00:00");
   return {date:`${p.year}-${p.month}-${p.day}`, iso:`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${off}`};
 }
+function handoffIds(j, actions) { // message_ids of handoffs whose roles are in this export (falls back to all handoffs, then lastHandoff)
+  const hs = Array.isArray(j.handoffs) ? j.handoffs : [], bs = new Set((j.applications||[]).filter(a => actions.some(x => x.role_id === a.role_id)).map(a => a.batch || a.source));
+  let ids = hs.filter(h => bs.has(h.batch)).map(h => String(h.message_id));
+  if (!ids.length) ids = hs.map(h => String(h.message_id));
+  if (!ids.length && j.lastHandoff?.message_id) ids = [String(j.lastHandoff.message_id)];
+  return [...new Set(ids)];
+}
 function jobExport() {
   const j = data.jobs || {}, now = chiNow(), lh = j.lastHandoff || {};
   if (!(j.applications||[]).length) { st.textContent = "Nothing to export: the pipeline is empty."; alert("Nothing to export: the pipeline is empty (waiting for the next Codex email handoff)."); return; }
   const actions = (j.applications||[]).filter(a => a.role_id && ACT[normS(a.status)]).map(a => { const ds = normS(a.status), [action, instruction] = ACT[ds];
     return {role_id:a.role_id, employer:a.company||"", title:a.title||"", action, dashboard_status:ds, instruction, posting_url:a.url||null, note:(a.note||"").trim()||null, ...(action === "REMOVE" ? {analyze_company_for_other_roles:true, company_scan_instruction:SCAN} : {})}; });
   const summary = Object.fromEntries(Object.values(ACT).map(([k]) => [k, actions.filter(x => x.action === k).length]));
-  const out = {schema:"grokbot-job-instructions", schema_version:"1.1", generated_at:now.iso, source_handoff:{message_id:String(lh.message_id||""), date:String(lh.date||"")},
-    instructions_for_codex:"For each item in actions, find the job-sheet row by role_id (confirm with employer and title) and do what action says: APPLY = the role is queued for Billy to apply to; set its status so it is ready to apply. MARK_APPLIED = mark the row applied. SKIP = mark the row skipped and do not apply. MARK_CLOSED = mark the row closed; dashboard_status says why (closed_detected = the posting was detected as no longer live, closed_by_human = Billy closed it manually). REMOVE = first follow company_scan_instruction (decide whether the employer is worth scanning for other roles that fit Billy, and add qualifying roles as new rows or note why not), then delete the row. Add note to the row when it is not null. Change nothing else, and do not submit applications or contact anyone.",
+  const out = {schema:"grokbot-job-instructions", schema_version:"1.2", generated_at:now.iso, source_handoff:handoffIds(j, actions),
+    instructions_for_codex:"source_handoff lists the Codex handoff message_ids this export covers (it can span several batches). For each item in actions, find the job-sheet row by role_id (confirm with employer and title) and do what action says: APPLY = the role is queued for Billy to apply to; set its status so it is ready to apply. MARK_APPLIED = mark the row applied. SKIP = mark the row skipped and do not apply. MARK_CLOSED = mark the row closed; dashboard_status says why (closed_detected = the posting was detected as no longer live, closed_by_human = Billy closed it manually). REMOVE = first follow company_scan_instruction (decide whether the employer is worth scanning for other roles that fit Billy, and add qualifying roles as new rows or note why not), then delete the row. Add note to the row when it is not null. Change nothing else, and do not submit applications or contact anyone.",
     actions, summary};
   const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], {type: "application/json"}));
   const el = Object.assign(document.createElement("a"), {href: url, download: `job-instructions-${now.date}.json`}); document.body.append(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -173,7 +181,7 @@ function jobFeedback() {
   if (!n) { alert("The pipeline is already empty."); return; }
   if (!confirm(`This clears the current batch of ${n} roles from the dashboard. Export first if you haven't.`)) return;
   const ts = chiNow().iso;
-  save(d => { const j = d.jobs ||= {}; j.applications = []; j.shortlist = []; j.lastHandoff = null; j.feedbackSubmittedAt = ts; j.awaiting = "next Codex email handoff"; j.source = "email-handoff"; }, `Submitted Codex feedback: cleared batch of ${n} roles`);
+  save(d => { const j = d.jobs ||= {}; j.applications = []; j.shortlist = []; j.lastHandoff = null; j.handoffs = []; j.feedbackSubmittedAt = ts; j.awaiting = "next Codex email handoff"; j.source = "email-handoff"; }, `Submitted Codex feedback: cleared batch of ${n} roles`);
 }
 app.addEventListener("click", e => { if (e.target.id === "jobexport") jobExport(); if (e.target.id === "jobfeedback") jobFeedback(); });
 app.addEventListener("submit", e => { if (e.target.id !== "addtodo") return; e.preventDefault(); const text = e.target.t.value.trim(), id = "t" + Date.now(); save(d => { (d.todos ||= []).push({id, text, done: false}); }, "add to-do"); });
