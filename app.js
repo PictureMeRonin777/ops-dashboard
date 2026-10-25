@@ -46,7 +46,7 @@ const QS = ["urgent-important","important-not-urgent","passion-project"], QL = {
 const qc = r => QS.includes(r?.quadrant) ? ` q-${r.quadrant}` : "";
 const qsel = (attr, r) => `<select class="qsel" ${attr} title="Quadrant"><option value="">untagged</option>${QS.map(q=>`<option value="${q}" ${r.quadrant===q?"selected":""}>${q}</option>`).join("")}</select>`;
 const CLOSED = /closed|rejected|fail|skip|retired|done/i;
-const JOB_OK = new Set(["submitted","skipped over","closed","apply now"]); // Job Pipeline shows only actionable statuses
+const JOB_OK = new Set(["skipped over","apply now"]); // Job Pipeline shows only actionable statuses
 const jobOk = r => JOB_OK.has(String(r?.status ?? "").toLowerCase().replace(/[\s_-]+/g," ").trim());
 const trelloOpen = d => (d.trello||[]).filter(x=>!x.linked); // linked = duplicate of a seeded item (shown there)
 function openCards(d) { // open cards: logs (WSJ sent/contacts/replies) are history, not cards
