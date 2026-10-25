@@ -87,8 +87,8 @@ function render() {
    <form id="addtodo"><input name="t" placeholder="Add a to-do" required style="flex:1"><button>Add</button></form></section>
  </div>
  <div class="col">
-  <section class="card"><h2>💼 Job pipeline</h2><h3>Shortlist</h3>${table((j.shortlist||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
-   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table((j.applications||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","skipped_over","closed","apply_now"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
+  <section class="card"><h2>💼 Job pipeline <button type="button" id="jobexport" title="Download job status JSON (all roles, incl. hidden)">Export JSON</button></h2><h3>Shortlist</h3>${table((j.shortlist||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",r=>pill(r.status)]])}
+   ${tBy(d,"jobs").length?`<h3>Trello</h3>${tList(tBy(d,"jobs"))}`:""}<h3>Applications</h3>${table((j.applications||[]).filter(jobOk),[["Role","",r=>link(r.url,`${r.company}: ${r.title}`)],["Status","",(r)=>`<select data-app="${j.applications.indexOf(r)}">${[...new Set([r.status,"submitted","skipped_over","closed","apply_now","remove"])].map(s=>`<option ${s===r.status?"selected":""}>${esc(s)}</option>`).join("")}</select>`]])}</section>
   <section class="card sponsors"><h2>🤝 Sponsor leads</h2>${(d.sponsorLeads||[]).length ? `<ul class="tlist">${[...d.sponsorLeads].sort((a,b)=>a.rank-b.rank).map(x=>`<li class="${x.done?"done":""}"><label><input type="checkbox" data-sl="${esc(x.id)}" ${x.done?"checked":""} title="Applied / done"> <b>#${esc(x.rank)}</b> ${link(x.url,x.brand)}</label> <span class="tsmall">applied/done</span><br>${esc(x.offer)}<br><span class="tsmall">${esc(x.eligibility)}</span><br><span class="tsmall">Next: ${esc(x.nextStep)}</span></li>`).join("")}</ul>` : empty("No sponsor leads")}
    <p class="tsmall"><a href="https://cursor.com/canvas/store-dcf0a6f8-e310-4fdc-b774-d13dd728b8b1/33d2f834-edb8-4139-882e-70345c2cd41c" target="_blank" rel="noopener">Sponsorship plan ↗</a></p></section>
  </div>
@@ -139,8 +139,19 @@ app.addEventListener("change", e => {
   if (t.dataset.tdone) { const id = t.dataset.tdone, v = t.checked; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) { x.done = true; x.doneAt = new Date().toISOString(); } else { delete x.done; delete x.doneAt; } } }, v ? "check trello card done" : "uncheck trello card"); }
   if (t.dataset.trq) { const id = t.dataset.trq, v = t.value; save(d => { const x = (d.trello||[]).find(q => q.id === id); if (x) { if (v) x.quadrant = v; else delete x.quadrant; } }, "trello quadrant"); }
   if (t.dataset.sl) { const id = t.dataset.sl, v = t.checked; save(d => { const x = (d.sponsorLeads||[]).find(q => q.id === id); if (x) { x.done = v; x.doneAt = v ? new Date().toISOString() : null; } }, v ? "sponsor lead applied" : "uncheck sponsor lead"); }
-  if (t.dataset.app) { const i = +t.dataset.app, v = t.value, k = data.jobs.applications[i].url; save(d => { const x = d.jobs.applications.find(a => a.url === k); if (x) x.status = v; }, "job status"); }
+  if (t.dataset.app) { const i = +t.dataset.app, v = t.value, r0 = data.jobs.applications[i], id = r0.role_id, k = r0.url; save(d => { const x = d.jobs.applications.find(a => id ? a.role_id === id : a.url === k); if (x) x.status = v; }, "job status"); }
 });
+// Export: Codex job-status response schema + one extra per-result field, dashboard_status. Job data only.
+const RK = ["role_id","employer","role_title","status","recommendation","employer_posting_url","location","work_model","compensation","application_status","fit_update","cautions","evidence","confidence"];
+function jobExport() {
+  const j = data.jobs || {};
+  const results = (j.applications||[]).filter(a => a.handoff).map(a => { const o = {}; for (const k of RK) o[k] = a.handoff[k]; o.dashboard_status = a.status; return o; });
+  const out = {checked_at: j.lastHandoff?.checked_at || "", results};
+  const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], {type: "application/json"}));
+  const t = new Date(), ds = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
+  const el = Object.assign(document.createElement("a"), {href: url, download: `job-status-export-${ds}.json`}); document.body.append(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+app.addEventListener("click", e => { if (e.target.id === "jobexport") jobExport(); });
 app.addEventListener("submit", e => { if (e.target.id !== "addtodo") return; e.preventDefault(); const text = e.target.t.value.trim(), id = "t" + Date.now(); save(d => { (d.todos ||= []).push({id, text, done: false}); }, "add to-do"); });
 $("#keyform").addEventListener("submit", e => { e.preventDefault(); localStorage.setItem(LO, $("#owner").value.trim()); localStorage.setItem(LS, $("#token").value.trim()); $("#token").value = ""; $("#keybox").hidden = true; load(); });
 $("#forget").onclick = () => { localStorage.removeItem(LS); data = null; app.innerHTML = ""; $("#keybox").hidden = false; st.textContent = "key forgotten"; };
